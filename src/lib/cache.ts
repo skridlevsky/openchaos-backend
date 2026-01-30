@@ -1,61 +1,61 @@
-// Simple in-memory cache with TTL
-// Reduces GitHub API rate limit issues by caching responses for 5 minutes
+/**
+ * ETag-based caching for GitHub API requests.
+ *
+ * Uses conditional requests with If-None-Match headers. When data hasn't changed,
+ * GitHub returns 304 Not Modified without consuming rate limit quota.
+ *
+ * @see https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#use-conditional-requests-if-appropriate
+ */
+
 interface CacheEntry<T> {
   data: T;
-  timestamp: number;
+  etag: string;
 }
 
 const cache = new Map<string, CacheEntry<any>>();
-
-const DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
-
-export function getCached<T>(key: string): T | null {
-  const entry = cache.get(key);
-
-  if (!entry) {
-    return null;
-  }
-
-  const now = Date.now();
-  if (now - entry.timestamp > DEFAULT_TTL) {
-    cache.delete(key);
-    return null;
-  }
-
-  return entry.data;
-}
-
-export function setCache<T>(key: string, data: T): void {
-  cache.set(key, {
-    data,
-    timestamp: Date.now(),
-  });
-}
 
 export function clearCache(): void {
   cache.clear();
 }
 
-// Helper for fetch with caching
+/**
+ * Fetch with ETag-based caching for GitHub API.
+ *
+ * @param url - GitHub API endpoint
+ * @param options - Fetch options
+ * @returns Cached or fresh data
+ */
 export async function cachedFetch<T>(
   url: string,
   options?: RequestInit
 ): Promise<T> {
-  const cacheKey = `fetch:${url}:${JSON.stringify(options || {})}`;
+  const cacheKey = `fetch:${url}`;
+  const cached = cache.get(cacheKey);
 
-  const cached = getCached<T>(cacheKey);
-  if (cached) {
-    return cached;
+  const headers = new Headers(options?.headers);
+  if (cached?.etag) {
+    headers.set("If-None-Match", cached.etag);
   }
 
-  const response = await fetch(url, options);
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 304 && cached) {
+    return cached.data;
+  }
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 
   const data = await response.json();
-  setCache(cacheKey, data);
+  const etag = response.headers.get("ETag");
+
+  if (etag) {
+    cache.set(cacheKey, { data, etag });
+  }
 
   return data;
 }

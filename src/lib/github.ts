@@ -1,3 +1,5 @@
+import { cachedFetch } from "./cache.js";
+
 export interface PullRequest {
   number: number;
   title: string;
@@ -49,21 +51,12 @@ export async function getOpenPRs(): Promise<PullRequest[]> {
   let page = 1;
 
   while (true) {
-    const response = await fetch(
+    const prs: GitHubPR[] = await cachedFetch(
       `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=100&page=${page}`,
       {
         headers: getHeaders("application/vnd.github.v3+json"),
       }
     );
-
-    if (!response.ok) {
-      if (response.status === 403) {
-        throw new Error("Rate limited by GitHub API");
-      }
-      throw new Error(`GitHub API error: ${response.status}`);
-    }
-
-    const prs: GitHubPR[] = await response.json();
 
     if (prs.length === 0) {
       break;
@@ -113,30 +106,28 @@ async function getPRVotes(owner: string, repo: string, prNumber: number): Promis
   let page = 1;
 
   while (true) {
-    const response = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/reactions?per_page=100&page=${page}`,
-      {
-        headers: getHeaders("application/vnd.github.squirrel-girl-preview+json"),
-      },
-    );
+    try {
+      const reactions: GitHubReaction[] = await cachedFetch(
+        `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/reactions?per_page=100&page=${page}`,
+        {
+          headers: getHeaders("application/vnd.github.squirrel-girl-preview+json"),
+        }
+      );
 
-    if (!response.ok) {
+      if (reactions.length === 0) {
+        break;
+      }
+
+      allReactions = allReactions.concat(reactions);
+
+      if (reactions.length < 100) {
+        break;
+      }
+
+      page++;
+    } catch {
       break;
     }
-
-    const reactions: GitHubReaction[] = await response.json();
-
-    if (reactions.length === 0) {
-      break;
-    }
-
-    allReactions = allReactions.concat(reactions);
-
-    if (reactions.length < 100) {
-      break;
-    }
-
-    page++;
   }
 
   return allReactions.filter((r) => r.content === "+1").length - allReactions.filter((r) => r.content === "-1").length;
@@ -155,21 +146,12 @@ interface GitHubMergedPR {
 export async function getMergedPRs(): Promise<MergedPullRequest[]> {
   const [owner, repo] = GITHUB_REPO.split("/");
 
-  const response = await fetch(
+  const prs: GitHubMergedPR[] = await cachedFetch(
     `https://api.github.com/repos/${owner}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=20`,
     {
       headers: getHeaders("application/vnd.github.v3+json"),
     }
   );
-
-  if (!response.ok) {
-    if (response.status === 403) {
-      throw new Error("Rate limited by GitHub API");
-    }
-    throw new Error(`GitHub API error: ${response.status}`);
-  }
-
-  const prs: GitHubMergedPR[] = await response.json();
 
   // Filter to only merged PRs (not just closed), exclude repo owner's maintenance PRs
   const REPO_OWNER = owner;
