@@ -16,7 +16,7 @@ pnpm dev
 
 | Service | Status | Description |
 |---------|--------|-------------|
-| MCP Server | planned | AI agent access to governance data ([PR #151](https://github.com/skridlevsky/openchaos/pull/151)) |
+| MCP Server | live | AI agent access to governance data - [Setup guide](src/mcp/README.md) |
 | Visitor Counter | planned | Real-time visitor tracking ([PR #152](https://github.com/skridlevsky/openchaos/pull/152)) |
 
 ## Contributing
