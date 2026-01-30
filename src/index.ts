@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { env } from "./env.js";
 import { log } from "./logger.js";
+import { handleMCP } from "./mcp/handler.js";
 
 const startTime = Date.now();
 
@@ -32,16 +33,30 @@ const handle = (req: IncomingMessage, res: ServerResponse) => {
       uptime: Math.floor((Date.now() - startTime) / 1000),
       env: env.NODE_ENV,
     });
+    log.info("request", {
+      method: req.method,
+      url: req.url,
+      status: res.statusCode,
+      ms: Date.now() - start,
+    });
+  } else if (req.url === "/mcp") {
+    handleMCP(req, res).then(() => {
+      log.info("request", {
+        method: req.method,
+        url: req.url,
+        status: res.statusCode,
+        ms: Date.now() - start,
+      });
+    });
   } else {
     json(res, 404, { error: "not found" });
+    log.info("request", {
+      method: req.method,
+      url: req.url,
+      status: res.statusCode,
+      ms: Date.now() - start,
+    });
   }
-
-  log.info("request", {
-    method: req.method,
-    url: req.url,
-    status: res.statusCode,
-    ms: Date.now() - start,
-  });
 };
 
 const server = createServer(handle);
